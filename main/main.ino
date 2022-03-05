@@ -8,21 +8,24 @@
 #include <Adafruit_Fingerprint.h>  //https://github.com/adafruit/Adafruit-Fingerprint-Sensor-Library
 //************************************************************************
 //Fingerprint scanner Pins
-#define Finger_Rx 14 //D5
-#define Finger_Tx 12 //D6
+#define Finger_Rx 15 //D8
+#define Finger_Tx 13 //D7
 // Declaration for SSD1306 display connected using software I2C
 //************************************************************************
-SoftwareSerial mySerial(Finger_Rx, Finger_Tx);
+//SoftwareSerial mySerial(Finger_Rx, Finger_Tx);
+SoftwareSerial mySerial(Finger_Tx, Finger_Rx);
 Adafruit_Fingerprint finger = Adafruit_Fingerprint(&mySerial);
 //************************************************************************
 /* Set these to your desired credentials. */
-const char *ssid = "SSID";  //ENTER YOUR WIFI SETTINGS
-const char *password = "PASSWORD";
+const char *ssid = "Lino's 2";  //ENTER YOUR WIFI SETTINGS
+const char *password = "neroHA123";
 //************************************************************************
 //String postData ; // post array that will be send to the website
-String link = "http://something:5000"; //computer IP or the server domain
+String link = "http://192.168.100.103:5000"; //computer IP or the server domain
 //int FingerID = 0;     // The Fingerprint ID from the scanner 
 //uint8_t id;
+
+WiFiClient wifiClient;
 
 void setup() {
  
@@ -59,18 +62,19 @@ void loop() {
   if(WiFi.status() != WL_CONNECTED){
     connectToWiFi();
   }
-
-  char input = readInputOption();
+  Serial.println("Escolha uma opção entre 1 e 2");
+  int input = readInputOption();
   switch (input) {
-    case '1':
+    case 1:
+      Serial.println("Iniciando registro de novo fingerprint");
       //registrar fingerprint
       registerNewFingerPrint();
       break;
-    case '2':
+    case 2:
       // logar/loggout
       break;
     default:
-      Serial.println("Opcao invalida");
+      Serial.print("Opcao invalida: "); Serial.print(input); Serial.println(". Escolha entre 1 e 2");
       return;
   }
 //  
@@ -85,19 +89,22 @@ void loop() {
 //  //---------------------------------------------
 }
 
-char readInputOption() {
-  if (Serial.available() > 0) {
-    char rx_byte = Serial.read();
-    // verificar se é um numero
-    if ((rx_byte >= '0') && (rx_byte <= '9')) {
-      Serial.print("Opção escolhida: ");
-      Serial.println(rx_byte);
-      return rx_byte; 
+int readInputOption() {
+  int option = 0;
+  while (true) {
+    while (!Serial.available());
+    option = Serial.parseInt();
+    if (option == 0) {continue;}
+    if (option < 0 || option > 2) {
+      Serial.print(option);
+      Serial.println("Id escolhido é inválido. Precisa estar entre 1 e 2");
+      continue;
     } else {
-      Serial.print("Opção invalida. Escolha entre 1 e 2.");
-      return 0;
+      Serial.print("Opção escolhida foi: "); Serial.println(option);
+      break;
     }
   }
+  return option;
 }
 
 bool registerNewFingerPrint() {
@@ -106,11 +113,13 @@ bool registerNewFingerPrint() {
   while (true) {
     while (!Serial.available());
     id_ = Serial.parseInt();
-    if (id_ <= 0 || id_ > 127) {
+    if (id_ == 0) {continue;}
+    if (id_ < 0 || id_ > 127) {
+      Serial.print(id_);
       Serial.println("Id escolhido é inválido. Precisa estar entre 1 e 127");
       continue;
     } else {
-      Serial.print("Id Escolhido foi: "); Serial.print(id_);
+      Serial.print("Id Escolhido foi: "); Serial.println(id_);
       break;
     }
   }
@@ -130,14 +139,16 @@ bool checkIfIdExists(int fingerId) {
   Serial.println("Iniciando comunicacao http");
   HTTPClient http;
   String endpoint = link + "/checkExists?id_user=" + fingerId;
-  http.begin(endpoint);
+  http.begin(wifiClient, endpoint);
   int statusCode = http.GET();
+  String payload = "";
   if (statusCode == 200) {
     Serial.println("Requisicao realizada com sucesso!");
+    payload = http.getString();
+    Serial.println("Retorno: " + payload);
   } else {
      Serial.print("Algo deu errado na solicitacao. StatusCode: "); Serial.println(statusCode);
   }
-  String payload = http.getString();
   return payload == "found";
 }
 
@@ -324,8 +335,9 @@ bool registerFingerPrintServer(int fingerId) {
   Serial.println("Iniciando comunicacao http");
   HTTPClient http;
   String endpoint = link + "/createId";
-  http.begin(endpoint);
-  String body = "{\"id:\": " fingerId "}";
+  http.begin(wifiClient, endpoint);
+  String body = "{\"id\": " + String(fingerId) + "}";
+  http.header("Content-Type: application/json");
   int statusCode = http.POST(body);
   if (statusCode == 200) {
     Serial.println("Requisicao realizada com sucesso!");
@@ -338,7 +350,9 @@ bool registerFingerPrintServer(int fingerId) {
 
 //******************Register Finger Print*****************
 int registerFingerPrintLocalMemory(int fingerId) {
- 
+  Serial.println("iniciando registro do dedo com id: " + String(fingerId));
+  Serial.println("Por favor, insira o dedo");
+  
   int p = -1;
   while (p != FINGERPRINT_OK) {
     p = finger.getImage();
@@ -385,7 +399,7 @@ int registerFingerPrintLocalMemory(int fingerId) {
       return p;
   }
   
-  Serial.println("Remove finger");
+  Serial.println("Por favor, remova o dedo");
   delay(2000);
   p = 0;
   while (p != FINGERPRINT_NOFINGER) {
@@ -393,6 +407,7 @@ int registerFingerPrintLocalMemory(int fingerId) {
   }
   Serial.print("ID "); Serial.println(fingerId);
   p = -1;
+  Serial.println("Por favor coloque o dedo novamente");
   while (p != FINGERPRINT_OK) {
     p = finger.getImage();
     switch (p) {
@@ -439,6 +454,7 @@ int registerFingerPrintLocalMemory(int fingerId) {
   }
   
   // OK converted!
+  Serial.println("Por favor remova o dedo");
   Serial.print("Creating model for #");  Serial.println(fingerId);
   
   p = finger.createModel();
@@ -459,6 +475,7 @@ int registerFingerPrintLocalMemory(int fingerId) {
   p = finger.storeModel(fingerId);
   if (p == FINGERPRINT_OK) {
     Serial.println("Stored!");
+    return fingerId;
   } else if (p == FINGERPRINT_PACKETRECIEVEERR) {
     Serial.println("Communication error");
     return p;
