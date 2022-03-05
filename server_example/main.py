@@ -10,9 +10,11 @@ ids = [
         "age": 32,
         "name": "Rafael Veloso",
         "last_login": date(2022, 3, 1),
-        "last_logoff": date(2022, 3, 1)
+        "last_logoff": date(2022, 3, 1),
+        "logged": False,
     },
 ]
+
 
 @app.route("/")
 def hello_world():
@@ -47,6 +49,7 @@ def create_id():
         "name": "Unknown",
         "last_login": None,
         "last_logoff": None,
+        "logged": False,
     })
     return "ok"
 
@@ -54,6 +57,23 @@ def create_id():
 @app.route("/listIds", methods=['GET'])
 def list_ids():
     return jsonify(ids)
+
+
+@app.route("/log", methods=['POST'])
+def log_in_off():
+    data = {}
+    try:
+        data = json.loads(request.data)
+        print(data)
+    except Exception as e:
+        print(f"Error while trying to process login/logoff: {e}")
+    id_ = data.get("id", -1)
+    res = list(filter(lambda u: u['id'] == id_, ids))
+    res = res[0]
+    if not res:
+        return "error"
+    res['logged'] = not bool(res.get("logged"))
+    return res['logged'] and "on" or "off"
 
 
 app.run("0.0.0.0", port=5000, debug=False)
