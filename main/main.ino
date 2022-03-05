@@ -17,11 +17,11 @@ SoftwareSerial mySerial(Finger_Tx, Finger_Rx);
 Adafruit_Fingerprint finger = Adafruit_Fingerprint(&mySerial);
 //************************************************************************
 /* Set these to your desired credentials. */
-const char *ssid = "Lino's 2";  //ENTER YOUR WIFI SETTINGS
-const char *password = "neroHA123";
+const char *ssid = "SSID";  //ENTER YOUR WIFI SETTINGS
+const char *password = "password";
 //************************************************************************
 //String postData ; // post array that will be send to the website
-String link = "http://192.168.100.103:5000"; //computer IP or the server domain
+String link = "http://ip:5000"; //computer IP or the server domain
 //int FingerID = 0;     // The Fingerprint ID from the scanner 
 //uint8_t id;
 
@@ -30,30 +30,15 @@ WiFiClient wifiClient;
 void setup() {
  
   Serial.begin(9600);
-  //---------------------------------------------
   connectToWiFi();
-  //---------------------------------------------
-  
-  // set the data rate for the sensor serial port
   finger.begin(57600);
   Serial.println("\n\nAdafruit finger detect test");
- 
   if (finger.verifyPassword()) {
     Serial.println("Found fingerprint sensor!");
   } else {
     Serial.println("Did not find fingerprint sensor :(");
     while (1) { delay(1); }
   }
-  //---------------------------------------------
-  
-//  finger.getTemplateCount();
-//  Serial.print("Sensor contains "); Serial.print(finger.templateCount); Serial.println(" templates");
-//  Serial.println("Waiting for valid finger...");
-  
-  //------------*test the connection*------------
-  
-  //SendFingerprintID( FingerID );
-  
 }
 //************************************************************************
 void loop() {
@@ -67,7 +52,6 @@ void loop() {
   switch (input) {
     case 1:
       Serial.println("Iniciando registro de novo fingerprint");
-      //registrar fingerprint
       registerNewFingerPrint();
       break;
     case 2:
@@ -77,16 +61,6 @@ void loop() {
       Serial.print("Opcao invalida: "); Serial.print(input); Serial.println(". Escolha entre 1 e 2");
       return;
   }
-//  
-//  //---------------------------------------------
-//  //If there no fingerprint has been scanned return -1 or -2 if there an error or 0 if there nothing, The ID start form 1 to 127
-//  FingerID = getFingerprintID();  // Get the Fingerprint ID from the Scanner
-//  delay(50);            //don't need to run this at full speed.
-// //---------------------------------------------
-//  ChecktoAddID();
-//  //---------------------------------------------
-//  ChecktoDeleteID();
-//  //---------------------------------------------
 }
 
 int readInputOption() {
@@ -340,7 +314,7 @@ bool registerFingerPrintServer(int fingerId) {
   http.header("Content-Type: application/json");
   int statusCode = http.POST(body);
   if (statusCode == 200) {
-    Serial.println("Requisicao realizada com sucesso!");
+     Serial.println("Requisicao realizada com sucesso!");
   } else {
      Serial.print("Algo deu errado na solicitacao. StatusCode: "); Serial.println(statusCode);
   }
@@ -348,7 +322,6 @@ bool registerFingerPrintServer(int fingerId) {
   return payload == "ok";
 }
 
-//******************Register Finger Print*****************
 int registerFingerPrintLocalMemory(int fingerId) {
   Serial.println("iniciando registro do dedo com id: " + String(fingerId));
   Serial.println("Por favor, insira o dedo");
@@ -491,27 +464,6 @@ int registerFingerPrintLocalMemory(int fingerId) {
   }
 }
 
-//
-////******************Check if there a Fingerprint ID to add******************
-//void confirmAdding(){
-//  Serial.println("confirming Adding...");
-//  HTTPClient http;    //Declare object of class HTTPClient
-//  //Post Data
-//  postData = "confirm_id=" + String(id); // Add the Fingerprint ID to the Post array in order to send it
-//  // Post methode
-// 
-//  http.begin(link); //initiate HTTP request, put your Website URL or Your Computer IP 
-//  http.addHeader("Content-Type", "application/x-www-form-urlencoded");    //Specify content-type header
-//  
-//  int httpCode = http.POST(postData);   //Send the request
-//  String payload = http.getString();    //Get the response payload
-//  delay(1000);
-//  Serial.println(payload);
-//  
-//  http.end();  //Close connection
-//  Serial.println("confirmation complete");
-//}
-//********************connect to the WiFi******************
 void connectToWiFi(){
     WiFi.mode(WIFI_OFF);        //Prevents reconnection issue (taking too long to connect)
     delay(1000);
