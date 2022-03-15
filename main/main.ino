@@ -5,6 +5,7 @@
 #include <SoftwareSerial.h>
 #include <ESP8266WebServer.h>
 #include <ESP8266HTTPClient.h>
+#include <ArduinoJson.h>
 #include <Adafruit_Fingerprint.h>  //https://github.com/adafruit/Adafruit-Fingerprint-Sensor-Library
 
 #define Finger_Rx 15 //D8
@@ -14,15 +15,16 @@
 SoftwareSerial mySerial(Finger_Tx, Finger_Rx);
 Adafruit_Fingerprint finger = Adafruit_Fingerprint(&mySerial);
 
-const char *ssid = "SSID";  //ENTER YOUR WIFI SETTINGS
-const char *password = "123";
-String link = "http://localhost"; //computer IP or the server domain
+const char *ssid = "Lino's 2";  //ENTER YOUR WIFI SETTINGS
+const char *password = "neroHA123";
+String link = "http://biometric-app-iot.herokuapp.com"; //computer IP or the server domain
 
 WiFiClient wifiClient;
 
 void setup() {
  
   Serial.begin(9600);
+  Serial.setTimeout(10);
   connectToWiFi();
   finger.begin(57600);
   Serial.println("\n\nAdafruit finger detect test");
@@ -76,52 +78,76 @@ int readInputOption() {
 }
 
 bool registerNewFingerPrint() {
-  Serial.println("Escolha o numero do ID desejado: ");
-  int id_ = 0;
+  Serial.println("Digite seu nome: ");
+  String userName = "";
+  int userAge = -1;
+  
   while (true) {
     while (!Serial.available());
-    id_ = Serial.parseInt();
-    if (id_ == 0) {continue;}
-    if (id_ < 0 || id_ > 127) {
-      Serial.print(id_);
-      Serial.println("Id escolhido é inválido. Precisa estar entre 1 e 127");
-      continue;
-    } else {
-      Serial.print("Id Escolhido foi: "); Serial.println(id_);
-      break;
-    }
+    userName = Serial.readString();
+    if (userName == "" || userName == "\n") {continue;}
+    break;
   }
-  bool exists = checkIfIdExists(id_);
-  if (exists) {
-    Serial.println("Id já registrado, por favor escolha outro");
-    return false;
+  Serial.print("nome digitado: "); Serial.println(userName);
+  Serial.println("Digite sua idade: ");
+  while (true) {
+    while (!Serial.available());
+    userAge = Serial.parseInt();
+    if (userAge == 0) {continue;}
+    break;
   }
-  int result = registerFingerPrint(id_);
+  Serial.print("idade digitada: "); Serial.println(userAge);
+  int result = registerFingerPrint(userName, userAge);
   if (result == -1) {
     return false;
   }
   return true;
 }
 
-bool checkIfIdExists(int fingerId) {
+int registerFingerPrint(String userName, int userAge) {
+  int userId = registerFingerPrintServer(userName, userAge);
+  Serial.print("Id registrado: "); Serial.println(userId);
+  if (userId < 0 || userId > 127) {
+    Serial.println("Não é possível gravar o ID");
+    return -1;
+  }
+  bool created = registerFingerPrintLocalMemory(userId);
+  if (!created) {
+    Serial.println("Algo deu errado ao registrar fingerprint :/");
+    return -1;
+  }
+  Serial.println("Id registrado com sucesso!");
+  return userId;
+}
+
+int registerFingerPrintServer(String userName, int userAge) {
   Serial.println("Iniciando comunicacao http");
   HTTPClient http;
-  String endpoint = link + "/checkExists?id_user=" + fingerId;
+  String endpoint = link + "/user";
   http.begin(wifiClient, endpoint);
-  int statusCode = http.GET();
-  String payload = "";
+  StaticJsonDocument<200> doc;
+  doc["name"] = userName;
+  doc["age"] = userAge;
+  String json;
+  serializeJson(doc, json);
+  http.addHeader("Content-Type", "application/json"); 
+  int statusCode = http.POST(json);
   if (statusCode == 200) {
-    Serial.println("Requisicao realizada com sucesso!");
-    payload = http.getString();
-    Serial.println("Retorno: " + payload);
+     Serial.println("Requisicao realizada com sucesso!");
   } else {
      Serial.print("Algo deu errado na solicitacao. StatusCode: "); Serial.println(statusCode);
+     return -1;
   }
-  return payload == "found";
+  return http.getString().toInt();
 }
 
 bool loginLogoff() {
   int fingerId = getStoredFingerPrintID();
+  while (fingerId == 0) {
+    Serial.println("Tente novamente!");
+    fingerId = getStoredFingerPrintID();
+  }
+  Serial.print("Id localizado: "); Serial.println(fingerId);
   if (fingerId > 0) {
     return loginLogoffServer(fingerId);
   }
@@ -198,10 +224,10 @@ int getStoredFingerPrintID() {
 bool loginLogoffServer(int fingerId) {
   Serial.println("Iniciando comunicacao http");
   HTTPClient http;
-  String endpoint = link + "/log";
+  String endpoint = link + "/user/log/" + String(fingerId);
   http.begin(wifiClient, endpoint);
-  String body = "{\"id\": " + String(fingerId) + "}";
-  http.header("Content-Type: application/json");
+  String body = "{}";
+  http.addHeader("Content-Type", "application/json"); 
   int statusCode = http.POST(body);
   if (statusCode == 200) {
      Serial.println("Requisicao realizada com sucesso!");
@@ -212,10 +238,12 @@ bool loginLogoffServer(int fingerId) {
   if (payload == "on") {
     Serial.println("Usuário estava deslogado e agora foi logado!");
     return true;
-  } else {
+  } else if (payload == "off") {
     Serial.println("Usuário estava logado e agora foi deslogado!");
-    return false;
+  } else {
+    Serial.println("Algo deu errado na comunicação com API!");
   }
+  return false;
 }
 
 void deleteFingerprint(int fingerId) {
@@ -237,40 +265,6 @@ void deleteFingerprint(int fingerId) {
     Serial.print("Unknown error: 0x"); Serial.println(p, HEX);
     return;
   }
-}
-
-int registerFingerPrint(int fingerId) {
-  int res = registerFingerPrintLocalMemory(fingerId);
-  if (res == -1) {
-    Serial.println("Algo deu errado ao registrar o id localmente :/");
-    return -1;
-  }
-  bool created = registerFingerPrintServer(fingerId);
-  if (!created) {
-    Serial.println("Algo deu errado ao registrar o id no servidor :/");
-    //Se algo deu errado com o servidor, delete da memoria local
-    deleteFingerprint(fingerId);
-    return -1;
-  }
-  Serial.println("Id registrado com sucesso!");
-  return res;
-}
-
-bool registerFingerPrintServer(int fingerId) {
-  Serial.println("Iniciando comunicacao http");
-  HTTPClient http;
-  String endpoint = link + "/createId";
-  http.begin(wifiClient, endpoint);
-  String body = "{\"id\": " + String(fingerId) + "}";
-  http.header("Content-Type: application/json");
-  int statusCode = http.POST(body);
-  if (statusCode == 200) {
-     Serial.println("Requisicao realizada com sucesso!");
-  } else {
-     Serial.print("Algo deu errado na solicitacao. StatusCode: "); Serial.println(statusCode);
-  }
-  String payload = http.getString();
-  return payload == "ok";
 }
 
 int registerFingerPrintLocalMemory(int fingerId) {
