@@ -15,8 +15,8 @@
 SoftwareSerial mySerial(Finger_Tx, Finger_Rx);
 Adafruit_Fingerprint finger = Adafruit_Fingerprint(&mySerial);
 
-const char *ssid = "Lino's 2";  //ENTER YOUR WIFI SETTINGS
-const char *password = "neroHA123";
+const char *ssid = "SSID";  //ENTER YOUR WIFI SETTINGS
+const char *password = "SENHA";
 String link = "http://biometric-app-iot.herokuapp.com"; //computer IP or the server domain
 
 WiFiClient wifiClient;
